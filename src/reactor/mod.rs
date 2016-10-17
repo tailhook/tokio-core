@@ -14,6 +14,7 @@ use std::time::{Instant, Duration};
 
 use futures::{self, Future, IntoFuture, Async};
 use futures::task::{self, Unpark, Task, Spawn};
+use futures::stream::Stream;
 use mio;
 use slab::Slab;
 
@@ -588,6 +589,18 @@ impl Handle {
               R: IntoFuture<Item=(), Error=()> + 'static,
     {
         self.spawn(futures::lazy(f))
+    }
+
+    /// Spawns all futures in stream, but only `n` at most an any time
+    pub fn spawn_many<S, F>(&self, n: usize, stream: S)
+        where S: Stream<Item=F, Error=()> + 'static,
+              F: IntoFuture<Item=(), Error=()> + 'static
+    {
+        let handle = self.clone();
+        self.spawn(stream.for_each(move |f| {
+            handle.spawn::<F::Future>(f.into_future());
+            Ok::<(), ()>(())
+        }))
     }
 }
 
